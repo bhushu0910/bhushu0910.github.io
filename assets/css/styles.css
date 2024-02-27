@@ -327,6 +327,53 @@ img {
     margin-bottom: var(--mb-0-75);
 }
 
+.inner_heading{
+    border: 0px solid #ddd;
+    height: 20px;
+    line-height: 25px;
+    font-size: 15px;
+    text-transform: uppercase;
+    overflow: hidden;
+
+}
+
+.inner_heading span{
+    position: relative;
+    animation: animation 10s ease infinite;
+
+}
+
+@keyframes animation {
+    0%,
+    100%{
+        top: 0;
+    }
+    20%{
+        top: 0;
+    }
+    25%{
+        top: -25px;
+    }
+    45%{
+        top: -25px;
+    }
+    50%{
+        top: -50px;
+    }
+    70%{
+        top: -50px;
+    }
+    75%{
+        top: 75px;
+    }
+    95%{
+        top: 100px;
+    }
+
+    
+}
+
+
 .home__description {
     margin-bottom: var(--mb-2);
 }
