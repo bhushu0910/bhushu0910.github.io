@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0d1117" />
+<title>Interview Copilot</title>
+<style>
+  :root{
+    --bg:#0d1117;
+    --surface:#161b22;
+    --surface-2:#1c232c;
+    --line:#2a313c;
+    --ink:#e8edf3;
+    --ink-dim:#8b97a6;
+    --ink-faint:#5a6573;
+    --accent:#7c9cf4;
+    --accent-press:#9fb6f7;
+    --live:#3fb950;
+    --warn:#e3a008;
+    --err:#f47067;
+    --radius:14px;
+    --pad:16px;
+    font-size:16px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex;flex-direction:column;
+    height:100dvh;overflow:hidden;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  /* ---------- header ---------- */
+  header{
+    display:flex;align-items:center;gap:10px;
+    padding:12px var(--pad);
+    border-bottom:1px solid var(--line);
+    flex:none;
+  }
+  .status{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--ink-dim)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--ink-faint);flex:none}
+  .dot.on{background:var(--live);box-shadow:0 0 0 0 rgba(63,185,80,.5);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(63,185,80,.45)}70%{box-shadow:0 0 0 9px rgba(63,185,80,0)}100%{box-shadow:0 0 0 0 rgba(63,185,80,0)}}
+  @media (prefers-reduced-motion:reduce){.dot.on{animation:none}}
+  .spacer{flex:1}
+  .icon-btn{
+    background:none;border:1px solid var(--line);color:var(--ink-dim);
+    width:38px;height:38px;border-radius:10px;font-size:1.1rem;cursor:pointer;
+    display:grid;place-items:center;
+  }
+  .icon-btn:active{background:var(--surface-2)}
+
+  /* ---------- answer (dominant) ---------- */
+  main{flex:1;overflow-y:auto;padding:var(--pad);-webkit-overflow-scrolling:touch}
+  .empty{
+    height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;color:var(--ink-faint);gap:10px;padding:20px;
+  }
+  .empty b{color:var(--ink-dim);font-weight:600}
+  #answer{font-size:1.06rem;line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
+  #answer h1,#answer h2,#answer h3{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:1.1em 0 .35em;font-weight:700}
+  #answer h1:first-child,#answer h2:first-child,#answer h3:first-child{margin-top:0}
+  #answer code{background:var(--surface-2);padding:.1em .35em;border-radius:5px;font-size:.9em;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  #answer pre{background:var(--surface);border:1px solid var(--line);border-top:none;border-radius:0 0 10px 10px;padding:12px;font-size:.86rem;margin:0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;tab-size:2;-moz-tab-size:2}
+  #answer pre code{background:none;padding:0}
+  #answer .code{margin:.6em 0}
+  #answer .code-bar{display:flex;align-items:center;justify-content:space-between;background:var(--surface-2);border:1px solid var(--line);border-radius:10px 10px 0 0;padding:5px 10px}
+  #answer .code-bar span{font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint);font-family:ui-monospace,monospace}
+  #answer .code-bar .copy{background:none;border:1px solid var(--line);color:var(--ink-dim);font-size:.72rem;padding:3px 9px;border-radius:6px;cursor:pointer}
+  #answer .code-bar .copy:active{background:var(--line)}
+  #answer strong{color:#fff}
+  .caret{display:inline-block;width:8px;height:1.05em;background:var(--accent);vertical-align:-2px;animation:blink 1s step-end infinite}
+  @keyframes blink{50%{opacity:0}}
+  .note{margin-top:14px;font-size:.8rem;color:var(--ink-faint)}
+  .err-box{border:1px solid var(--err);background:rgba(244,112,103,.08);color:var(--err);padding:12px;border-radius:10px;font-size:.9rem}
+
+  /* ---------- transcript strip ---------- */
+  .transcript{
+    flex:none;border-top:1px solid var(--line);background:var(--surface);
+    padding:8px var(--pad);
+    max-height:85px;overflow-y:auto;
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    font-size:.82rem;line-height:1.45;color:var(--ink-dim);
+  }
+  .transcript .label{display:block;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px}
+  .transcript .interim{color:var(--ink-faint);font-style:italic}
+  .transcript.empty-strip{color:var(--ink-faint)}
+
+  /* ---------- controls ---------- */
+  .controls{
+    flex:none;display:flex;gap:10px;align-items:stretch;
+    padding:12px var(--pad) calc(12px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line);background:var(--bg);
+  }
+  .btn{
+    border:none;border-radius:var(--radius);font-size:1rem;font-weight:600;
+    cursor:pointer;color:var(--ink);padding:0 16px;
+  }
+  .btn-side{flex:none;background:var(--surface-2);border:1px solid var(--line);min-width:64px;font-size:.82rem;color:var(--ink-dim)}
+  .btn-side:active{background:var(--line)}
+  .btn-side.live{border-color:var(--live);color:var(--live)}
+  .btn-answer{
+    flex:1;background:var(--accent);color:#0b1020;font-size:1.12rem;font-weight:700;
+    height:58px;letter-spacing:.01em;
+    transition: background 0.15s ease, opacity 0.15s ease;
+  }
+  .btn-answer:active{background:var(--accent-press)}
+  .btn-answer:disabled{opacity:.5;cursor:default}
+
+  /* ---------- settings sheet ---------- */
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;z-index:10}
+  .sheet-bg.show{display:block}
+  .sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:11;
+    background:var(--surface);border-top:1px solid var(--line);
+    border-radius:18px 18px 0 0;padding:20px var(--pad) calc(20px + env(safe-area-inset-bottom));
+    transform:translateY(100%);transition:transform .22s ease;
+    max-height:90dvh;overflow-y:auto;
+  }
+  .sheet.show{transform:translateY(0)}
+  .sheet h2{margin:0 0 4px;font-size:1.15rem}
+  .sheet p{margin:0 0 16px;color:var(--ink-dim);font-size:.86rem;line-height:1.5}
+  .sheet a{color:var(--accent)}
+  label{display:block;font-size:.8rem;color:var(--ink-dim);margin:14px 0 6px}
+  input,select,textarea{
+    width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);
+    border-radius:10px;padding:13px;font-size:1rem;font-family:inherit;
+  }
+  textarea{resize:vertical;line-height:1.45;min-height:90px}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  .save{width:100%;margin-top:20px;background:var(--accent);color:#0b1020;height:52px;font-weight:700;border:none;border-radius:var(--radius);font-size:1.02rem;cursor:pointer}
+  .hint{font-size:.76rem;color:var(--ink-faint);margin-top:6px;line-height:1.45}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">Idle</span></div>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙</button>
+</header>
+
+<main id="answerWrap">
+  <div class="empty" id="emptyState">
+    <b>Listen, then tap Answer.</b>
+    <span>Turn on listening so the mic captures the interviewer. When you've heard the question, tap <b>Answer</b> for a concise response.</span>
+  </div>
+  <div id="answer" hidden></div>
+</main>
+
+<div class="transcript empty-strip" id="transcript">
+  <span class="label">Live transcript</span>
+  <span id="transcriptText">Listening is off.</span>
+</div>
+
+<div class="controls">
+  <button class="btn btn-side" id="listenBtn">🎙 Listen</button>
+  <button class="btn btn-answer" id="answerBtn">Answer</button>
+  <button class="btn btn-side" id="clearBtn">Clear</button>
+</div>
+
+<!-- settings -->
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet">
+  <h2>Setup</h2>
+  <p>Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (no credit card). Don't enable billing — it removes the free tier.</p>
+  <label for="keyInput">Gemini API key</label>
+  <input id="keyInput" type="password" placeholder="AIza…" autocomplete="off" />
+  <label for="modelInput">Model</label>
+  <select id="modelInput">
+    <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (fastest / recommended)</option>
+    <option value="gemini-3.5-flash">gemini-3.5-flash (smarter)</option>
+    <option value="gemini-3.1-pro">gemini-3.1-pro (highest quality)</option>
+  </select>
+  <div class="hint">If a model returns a 404, it isn't on your free tier yet — pick another. Flash-Lite is fastest; Flash is a bit smarter.</div>
+  <label for="langInput">Spoken language</label>
+  <select id="langInput">
+    <option value="en-IN">English (India)</option>
+    <option value="en-US">English (US)</option>
+    <option value="en-GB">English (UK)</option>
+    <option value="hi-IN">Hindi (India)</option>
+  </select>
+  <label for="resumeInput">Your resume / background (used as context)</label>
+  <textarea id="resumeInput" rows="6" placeholder="Paste your resume as plain text…"></textarea>
+  <div class="hint">Answers are tailored to this — behavioral questions draw on your real projects, technical answers default to your stack. Pre-filled from your resume; edit freely.</div>
+  <button class="save" id="saveBtn">Save</button>
+  <div class="hint" style="margin-top:14px">Your key is stored only in this browser (localStorage) and is sent directly to Google. Nothing else leaves your phone.</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const dot=$("dot"), statusText=$("statusText");
+  const answerEl=$("answer"), emptyState=$("emptyState");
+  const transcriptText=$("transcriptText"), transcriptBox=$("transcript");
+  const listenBtn=$("listenBtn"), answerBtn=$("answerBtn"), clearBtn=$("clearBtn");
+  const sheet=$("sheet"), sheetBg=$("sheetBg");
+  const keyInput=$("keyInput"), modelInput=$("modelInput"), langInput=$("langInput"), resumeInput=$("resumeInput");
+
+  const DEFAULT_RESUME=`Abhishek Gawande — Backend Developer
+Summary: Results-driven Backend Engineer, 4 years building Java and Spring Boot microservices, event-driven systems, and REST APIs on Google Cloud Platform. Designs scalable distributed backend services; improves reliability via testing, validation, error handling; works in Agile teams.
+
+Skills:
+- Languages: Java, Python, SQL
+- Backend/Frameworks: Spring Boot, Spring MVC, Spring Data JPA, Spring Security, REST APIs
+- Design: SOLID principles, OOP design patterns
+- Distributed systems: Microservices, Apache Kafka, event-driven architecture
+- Cloud/Data: GCP, App Engine Gen2, Cloud Functions, BigQuery, Cloud Storage
+- Databases: MySQL, Cloud SQL
+- Testing: JUnit, Mockito
+- DevOps: Cloud Build, Artifact Registry, Maven, Git, CI/CD
+
+Experience — Software Engineer, Tata Consultancy Services (Client: Jaguar Land Rover), May 2022–Present
+Product Information Management (PIM):
+- Built core product-management & publishing microservices and REST APIs; >99.5% of updates processed within SLA.
+- Built a Kafka-to-analytics pipeline for near real-time reporting across the product catalog.
+- Led runtime upgrades to a modern Java platform on App Engine Gen2.
+- Added an API Gateway, standardized auth, and service-level traffic controls.
+- Added JUnit/Mockito unit & integration tests.
+PIM Data Ingestion Pipeline:
+- Event-driven ingestion pipeline with Kafka + Spring Boot.
+- Consumers persisting to Cloud SQL (transactional) and BigQuery (analytics).
+- Validation, deduplication, retry, error-handling for consistency and fault tolerance.
+- Batch processing and efficient write strategies for throughput.
+- CI/CD with Cloud Build, Artifact Registry, Maven, Git.
+
+Education: B.Tech (IT), Government College of Engineering, Amravati — CGPA 7.92
+Certifications: Google Cloud Associate Cloud Engineer (Dec 2025); Google Professional Cloud Developer (Oct 2025)`;
+
+  const LS={key:"ic_key",model:"ic_model",lang:"ic_lang",resume:"ic_resume"};
+  let cfg={
+    key: "",
+    model: "gemini-3.1-flash-lite",
+    lang: "en-IN",
+    resume: DEFAULT_RESUME
+  };
+
+  // Safe load of config
+  try {
+    cfg.key = localStorage.getItem(LS.key) || "";
+    cfg.model = localStorage.getItem(LS.model) || "gemini-3.1-flash-lite";
+    cfg.lang = localStorage.getItem(LS.lang) || "en-IN";
+    cfg.resume = localStorage.getItem(LS.resume) || DEFAULT_RESUME;
+  } catch(e) {
+    console.warn("localStorage read error (expected in some sandboxed/file:// environments):", e);
+  }
+
+  let finalTranscript="";
+  let listening=false;
+  let recognition=null;
+  let currentAbortController=null;
+  let modelSupportsThinkingConfig=true; // session cache to prevent redundant latency
+  let autoAnswerTimer=null;
+
+  /* ---------- settings sheet ---------- */
+  function openSheet(){
+    keyInput.value=cfg.key; modelInput.value=cfg.model; langInput.value=cfg.lang; resumeInput.value=cfg.resume;
+    sheetBg.classList.add("show"); sheet.classList.add("show");
+  }
+  function closeSheet(){ sheetBg.classList.remove("show"); sheet.classList.remove("show"); }
+  
+  function saveSettings(){
+    const prevLang = cfg.lang;
+    cfg.key=keyInput.value.trim(); cfg.model=modelInput.value; cfg.lang=langInput.value; cfg.resume=resumeInput.value.trim();
+    
+    try {
+      localStorage.setItem(LS.key,cfg.key);
+      localStorage.setItem(LS.model,cfg.model);
+      localStorage.setItem(LS.lang,cfg.lang);
+      localStorage.setItem(LS.resume,cfg.resume);
+    } catch(e) {
+      console.warn("localStorage write error:", e);
+    }
+    
+    if(recognition){ 
+      recognition.lang=cfg.lang; 
+      // Stop and restart so the language change takes effect immediately
+      if(listening && prevLang !== cfg.lang){
+        try{ recognition.stop(); }catch(_){}
+      }
+    }
+    closeSheet();
+  }
+
+  $("settingsBtn").onclick=openSheet;
+  $("saveBtn").onclick=saveSettings;
+  sheetBg.onclick=saveSettings; // Auto-save changes when user closes the modal by clicking outside
+
+  /* ---------- speech recognition ---------- */
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+
+  function setStatus(text,on){ statusText.textContent=text; dot.classList.toggle("on",!!on); }
+
+  function showTranscript(interim){
+    transcriptBox.classList.remove("empty-strip");
+    const full=(finalTranscript+ " " + (interim||"")).trim();
+    if(!full){ transcriptText.textContent="…"; return; }
+    if(interim){
+      transcriptText.innerHTML = escapeHtml(finalTranscript)+' <span class="interim">'+escapeHtml(interim)+'</span>';
+    } else {
+      transcriptText.textContent=full;
+    }
+    transcriptBox.scrollTop=transcriptBox.scrollHeight;
+  }
+
+  function resetAutoAnswerTimer(){
+    if(autoAnswerTimer) clearTimeout(autoAnswerTimer);
+    if(listening){
+      autoAnswerTimer = setTimeout(()=>{
+        if(finalTranscript.trim() && !currentAbortController){
+          answerBtn.click(); // trigger generation automatically
+        }
+      }, 2000); // 2 seconds of silence triggers answer automatically
+    }
+  }
+
+  function startListening(){
+    if(!SR){ setStatus("No speech support",false); transcriptBox.classList.remove("empty-strip"); transcriptText.textContent="This browser can't do speech recognition. Use Chrome or Safari."; return; }
+    recognition=new SR();
+    recognition.continuous=true;
+    recognition.interimResults=true;
+    recognition.lang=cfg.lang;
+    recognition.onresult=function(e){
+      let localFinal = "";
+      let interim = "";
+      let hasNewFinal = false;
+      for(let i=0; i<e.results.length; i++){
+        const r=e.results[i];
+        if(r.isFinal){ 
+          localFinal += r[0].transcript + " "; 
+          hasNewFinal = true;
+        } else { 
+          interim += r[0].transcript; 
+        }
+      }
+      finalTranscript = localFinal.trim();
+      showTranscript(interim);
+
+      if (interim.trim().length > 0) {
+        // Active speech detected, cancel any scheduled auto-answer
+        if(autoAnswerTimer) { clearTimeout(autoAnswerTimer); autoAnswerTimer = null; }
+      } else if (hasNewFinal && finalTranscript.trim().length > 0) {
+        // Silence detected after final speech, schedule auto-answer
+        resetAutoAnswerTimer();
+      }
+    };
+    recognition.onerror=function(e){
+      const criticalErrors = ["not-allowed", "service-not-allowed", "audio-capture", "network", "language-not-supported"];
+      if(criticalErrors.includes(e.error)){
+        listening=false; 
+        updateListenUI();
+        setStatus("Error: "+e.error,false);
+        transcriptBox.classList.remove("empty-strip");
+        if(autoAnswerTimer) { clearTimeout(autoAnswerTimer); autoAnswerTimer = null; }
+        if(e.error==="not-allowed"||e.error==="service-not-allowed"){
+          transcriptText.textContent="Microphone permission denied. Allow mic access in the browser and tap Listen again.";
+        } else {
+          transcriptText.textContent="Speech recognition stopped due to error: "+e.error+". Tap Listen to restart.";
+        }
+      }
+    };
+    recognition.onend=function(){ if(listening){ try{recognition.start();}catch(_){} } };
+    try{ recognition.start(); listening=true; setStatus("Listening",true); updateListenUI(); }
+    catch(_){ /* already started */ }
+  }
+  function stopListening(){
+    listening=false;
+    if(autoAnswerTimer) { clearTimeout(autoAnswerTimer); autoAnswerTimer = null; }
+    if(recognition){ try{recognition.stop();}catch(_){} }
+    setStatus("Paused",false);
+    updateListenUI();
+  }
+  function updateListenUI(){
+    listenBtn.classList.toggle("live",listening);
+    listenBtn.textContent=listening?"⏸ Stop":"🎙 Listen";
+  }
+  listenBtn.onclick=function(){ listening?stopListening():startListening(); };
+
+  clearBtn.onclick=function(){
+    finalTranscript="";
+    if(autoAnswerTimer) { clearTimeout(autoAnswerTimer); autoAnswerTimer = null; }
+    transcriptText.textContent=listening?"…":"Listening is off.";
+    if(!listening) transcriptBox.classList.add("empty-strip");
+    answerEl.hidden=true; answerEl.innerHTML=""; emptyState.hidden=false;
+    if(listening && recognition){
+      try{ recognition.stop(); }catch(_){} // forces SpeechRecognition instance refresh to dump history
+    }
+  };
+
+  /* ---------- Gemini streaming ---------- */
+  function buildSystem(){
+    const base=[
+      "You are a live technical-interview copilot answering AS the candidate, in first person.",
+      "The user gives you a rolling speech transcript of an interviewer talking. Identify the MOST RECENT question or task and answer THAT.",
+      "",
+      "General rules:",
+      "- The transcript is noisy speech-to-text: ignore greetings, filler ('hi', 'okay', 'yeah'), names, and garbled/mis-heard tokens. Lock onto the substantive technical question and answer THAT.",
+      "- NEVER ask the user or interviewer a question, and never request clarification. This is a live conversation; a question back is useless. Make the most reasonable assumption and answer directly.",
+      "- When a detail is missing (e.g. a target value, input size, constraints), assume a sensible one, state it in one short clause (e.g. 'Assuming target t and an unsorted list:'), and answer fully. Never hedge or stall for lack of detail.",
+      "- Be precise and concise. No filler, no preamble, no 'great question'.",
+      "- Lead with the direct answer in the first line.",
+      "- Glanceable and speakable; under ~120 words unless code is required.",
+      "- Ground answers in the candidate's real background below. For behavioral questions, use their actual projects (STAR, tight). For 'tell me about yourself' / experience questions, speak from the resume.",
+      "- Default technical examples to the candidate's stack (Java, Spring Boot, Kafka, GCP) unless the interviewer specifies otherwise.",
+      "",
+      "WHEN TO WRITE CODE (bias strongly toward code):",
+      "- If the question involves finding, searching, computing, sorting, filtering, transforming, counting, or implementing something — or asks 'how would you' do any of those — it IS a coding question. Answer with real, runnable code in the structure below.",
+      "- Do NOT reply with a prose tour of built-in methods or options (e.g. listing Math.round/floor/ceil). Pick the right approach and write the code.",
+      "- If the question mentions a list, array, or collection, it is an algorithm OVER that collection. Write code that processes the collection (Java Streams or a loop) — not advice about single-value built-ins. Example: 'find the closest integer in a list to a target' => stream the list and pick min by absolute difference, NOT Math.round().",
+      "- When ambiguous between a trivial reading and a real coding problem, choose the coding problem and write code.",
+      "",
+      "CODING / DSA / implementation questions — use EXACTLY this structure:",
+      "## Approach",
+      "One or two lines on the idea.",
+      "```<language>",
+      "clean, idiomatic, runnable code (Java by default unless another language is implied)",
+      "```",
+      "## Complexity",
+      "Time: O(...)  | Space: O(...)",
+      "## Edge cases",
+      "- one or two brief items",
+      "Keep code minimal and correct; no comments unless they add real clarity.",
+      "Keep every code line short for a phone screen (aim < ~50 chars). Break long statements across lines: split chained method calls, long conditionals, and long argument lists onto separate lines so nothing needs horizontal scrolling.",
+      "",
+      "If the transcript is short, incomplete, or does not contain a clear question, look for any technical keywords or topics mentioned (e.g. 'Kafka', 'Spring Boot', 'microservices'). Assume the interviewer is asking you to explain that topic or describe your experience with it, and provide a direct, helpful explanation grounded in your background. Never return an empty answer or say no question was found."
+    ];
+    const r=(cfg.resume||"").trim();
+    if(r){ base.push("","=== CANDIDATE BACKGROUND ===",r); }
+    return base.join("\n");
+  }
+
+  function recentTranscript(){
+    const t=finalTranscript.trim();
+    return t.length>2200 ? t.slice(-2200) : t;
+  }
+
+  // pure: pull visible text + finishReason from one Gemini SSE JSON object
+  function geminiDelta(obj){
+    let text="", finish=null;
+    const cand=obj && obj.candidates && obj.candidates[0];
+    if(cand){
+      finish=cand.finishReason||null;
+      const parts=cand.content && cand.content.parts;
+      if(parts){ for(const p of parts){ if(p.thought) continue; if(typeof p.text==="string") text+=p.text; } }
+    }
+    return {text:text, finish:finish};
+  }
+
+  function statusMessage(status,msg){
+    if(status===404) return "Model \""+cfg.model+"\" not available on your tier. Open ⚙ and pick another.";
+    if(status===429) return "Free-tier rate limit hit. Wait a moment and try again.";
+    if(status===400 && /API key/i.test(msg||"")) return "Invalid API key. Check it in ⚙ Setup.";
+    return msg || ("Request failed ("+status+").");
+  }
+
+  answerBtn.onclick=async function(){
+    // Cancel any pending auto-answer and active generation
+    if(autoAnswerTimer) { clearTimeout(autoAnswerTimer); autoAnswerTimer = null; }
+    if(currentAbortController){
+      try { currentAbortController.abort(); } catch(_){}
+    }
+    
+    if(!cfg.key){ openSheet(); return; }
+    const t=recentTranscript();
+    if(!t){ renderError("No transcript yet. Tap Listen first, let the interviewer speak, then tap Answer."); return; }
+
+    currentAbortController = new AbortController();
+    const controller = currentAbortController;
+    
+    // UI remains responsive and clickable
+    answerBtn.textContent="Streaming…";
+    emptyState.hidden=true; answerEl.hidden=false;
+
+    // Append new response block to history instead of erasing previous ones
+    if (answerEl.children.length > 0) {
+      const divider = document.createElement("div");
+      divider.innerHTML = "<hr style='border:none; border-top:3px solid var(--line); margin:28px 0; opacity:0.8;'/>";
+      answerEl.appendChild(divider);
+    }
+    const container = document.createElement("div");
+    container.className = "answer-item";
+    container.innerHTML = '<span class="caret"></span>';
+    answerEl.appendChild(container);
+
+    const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(cfg.model)+
+              ":streamGenerateContent?alt=sse&key="+encodeURIComponent(cfg.key);
+
+    function call(applyThinkingBudgetLimit){
+      const gen={temperature:0.2,maxOutputTokens:1024,topP:0.9};
+      // Disable model "thinking": its hidden reasoning otherwise eats the output
+      // budget and truncates the visible answer mid-sentence. Also lowers latency.
+      if(applyThinkingBudgetLimit) gen.thinkingConfig={thinkingBudget:0};
+      const body={
+        systemInstruction:{parts:[{text:buildSystem()}]},
+        contents:[{role:"user",parts:[{text:"Live transcript:\n\""+t+"\"\n\nAnswer the most recent question."}]}],
+        generationConfig:gen
+      };
+      return fetch(url,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(body),
+        signal:controller.signal
+      });
+    }
+
+    let acc="", finish=null;
+    try{
+      let res;
+      // If we already know the model doesn't support thinkingConfig, bypass it to avoid latency
+      if(modelSupportsThinkingConfig){
+        res=await call(true);
+        // Some models (e.g. 2.0 or older) reject thinkingConfig -> retry once without it.
+        if(!res.ok && res.status===400){
+          let emsg=""; try{ const j=await res.json(); emsg=(j.error&&j.error.message)||""; }catch(_){}
+          if(/thinking/i.test(emsg)){ 
+            modelSupportsThinkingConfig = false; // cache validation state
+            res=await call(false); 
+          }
+          else { renderError(statusMessage(400,emsg)); return; }
+        }
+      } else {
+        res=await call(false);
+      }
+
+      if(!res.ok){
+        let emsg=""; try{ const j=await res.json(); emsg=(j.error&&j.error.message)||""; }catch(_){}
+        renderError(statusMessage(res.status,emsg)); return;
+      }
+
+      const reader=res.body.getReader();
+      const dec=new TextDecoder();
+      let buf="";
+      const handleLine=(line)=>{
+        line=line.trim();
+        if(!line.startsWith("data:")) return;
+        const payload=line.slice(5).trim();
+        if(!payload||payload==="[DONE]") return;
+        try{
+          const d=geminiDelta(JSON.parse(payload));
+          if(d.text) acc+=d.text;
+          if(d.finish) finish=d.finish;
+          renderMarkdown(acc,true,container);
+        }catch(_){ /* incomplete JSON line */ }
+      };
+      while(true){
+        const {value,done}=await reader.read();
+        if(done) break;
+        buf+=dec.decode(value,{stream:true});
+        let nl;
+        while((nl=buf.indexOf("\n"))>=0){ handleLine(buf.slice(0,nl)); buf=buf.slice(nl+1); }
+      }
+      buf+=dec.decode(); // flush decoder
+      if(buf.trim()) handleLine(buf); // flush any final line
+
+      renderMarkdown(acc,false,container);
+      
+      if(!acc.trim()){ 
+        container.innerHTML = '<div class="err-box">Empty response. Try again or switch model in ⚙.</div>'; 
+        return; 
+      }
+      if(finish && finish!=="STOP" && finish!=="MAX_TOKENS" ) {
+        const n=document.createElement("div"); n.className="note"; n.textContent="Answer ended early ("+finish+").";
+        container.appendChild(n);
+      } else if(finish==="MAX_TOKENS"){
+        const n=document.createElement("div"); n.className="note"; n.textContent="Hit the length limit — tap Answer again for more, or shorten the question.";
+        container.appendChild(n);
+      }
+    }catch(err){
+      if(err.name === "AbortError"){
+        return;
+      }
+      container.innerHTML = '<div class="err-box">Network error: ' + escapeHtml(err && err.message ? err.message : err) + '</div>';
+    }finally{
+      if(currentAbortController === controller) {
+        answerBtn.textContent="Answer";
+        currentAbortController = null; // Reset controller to indicate generation is complete
+      }
+    }
+  };
+
+  /* ---------- markdown renderer ---------- */
+  function escapeHtml(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+  
+  function renderError(msg){
+    emptyState.hidden=true; answerEl.hidden=false;
+    answerEl.innerHTML='<div class="err-box">'+escapeHtml(msg)+'</div>';
+  }
+  
+  function renderMarkdown(src,streaming,container){
+    if(!container) return;
+    
+    // 1. extract fenced code blocks first
+    const codeBlocks=[];
+    let s=src.replace(/```(\w*)\n?([\s\S]*?)```/g,(m,lang,code)=>{
+      const clean=code.replace(/\n$/,"");
+      codeBlocks.push('<div class="code"><div class="code-bar"><span>'+escapeHtml(lang||"code")+'</span><button class="copy" type="button">Copy</button></div><pre><code>'+escapeHtml(clean)+'</code></pre></div>');
+      return "\u0000"+(codeBlocks.length-1)+"\u0000";
+    });
+    
+    // 2. Escape HTML and apply basic inline element formatting
+    s=escapeHtml(s);
+    s=s.replace(/^###?\s+(.+)$/gm,'<h3>$1</h3>');
+    s=s.replace(/^##\s+(.+)$/gm,'<h2>$1</h2>');
+    s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+    s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
+    
+    // 3. Format bullet list groups
+    s=s.replace(/(?:^|\n)((?:- .*(?:\n|$))+)/g,(m,grp)=>{
+      const items=grp.trim().split("\n").map(l=>'<li>'+l.replace(/^- /,"")+'</li>').join("");
+      return "<ul style='margin:.3em 0 .3em 1.1em;padding:0'>"+items+"</ul>";
+    });
+    
+    // 4. Convert newlines to breaks for prose parts
+    s=s.replace(/\n{2,}/g,"<br><br>").replace(/\n/g,"<br>");
+    
+    // 5. Restore the code blocks with their internal newlines intact
+    s=s.replace(/\u0000(\d+)\u0000/g,(m,i)=>codeBlocks[+i]);
+    
+    container.innerHTML=s+(streaming?'<span class="caret"></span>':"");
+  }
+
+  // copy buttons in code blocks
+  answerEl.addEventListener("click",function(e){
+    const btn=e.target.closest&&e.target.closest(".copy");
+    if(!btn) return;
+    const codeEl=btn.parentElement.parentElement.querySelector("pre code");
+    if(!codeEl) return;
+    const text=codeEl.textContent;
+    const done=()=>{ btn.textContent="Copied"; setTimeout(()=>btn.textContent="Copy",1200); };
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done)); }
+    else fallbackCopy(text,done);
+  });
+  function fallbackCopy(text,cb){
+    const ta=document.createElement("textarea"); ta.value=text;
+    ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta);
+    ta.select(); try{document.execCommand("copy");}catch(_){}
+    document.body.removeChild(ta); cb&&cb();
+  }
+
+  // first run -> open setup
+  if(!cfg.key){ openSheet(); }
+})();
+</script>
+</body>
+</html>
