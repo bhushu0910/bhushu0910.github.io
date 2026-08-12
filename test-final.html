@@ -175,6 +175,7 @@
     <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (fastest / recommended)</option>
     <option value="gemini-3.6-flash">gemini-3.6-flash (balanced)</option>
     <option value="gemini-3.5-flash">gemini-3.5-flash (smarter)</option>
+    <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (fallback)</option>
   </select>
   <div class="hint">If a model returns a 404, it isn't on your free tier yet — pick another. Flash-Lite is fastest; Flash is a bit smarter.</div>
   <label for="langInput">Spoken language</label>
@@ -233,6 +234,7 @@ Education: B.Tech (IT), Government College of Engineering, Amravati — CGPA 7.9
 Certifications: Google Cloud Associate Cloud Engineer (Dec 2025); Google Professional Cloud Developer (Oct 2025)`;
 
   const LS={key:"ic_key",model:"ic_model",lang:"ic_lang",resume:"ic_resume"};
+  const MODELS=["gemini-3.5-flash-lite","gemini-3.6-flash","gemini-3.5-flash","gemini-3.1-flash-lite"];
   let cfg={
     key: "",
     model: "gemini-3.5-flash-lite",
@@ -249,12 +251,15 @@ Certifications: Google Cloud Associate Cloud Engineer (Dec 2025); Google Profess
   } catch(e) {
     console.warn("localStorage read error (expected in some sandboxed/file:// environments):", e);
   }
+  if(!MODELS.includes(cfg.model)){
+    cfg.model="gemini-3.5-flash-lite";
+    try{ localStorage.setItem(LS.model,cfg.model); }catch(_){}
+  }
 
   let finalTranscript="";
   let listening=false;
   let recognition=null;
   let currentAbortController=null;
-  let modelSupportsThinkingConfig=true; // session cache to prevent redundant latency
   let autoAnswerTimer=null;
   let restartTimer=null;
   let restartAttempts=0;
@@ -401,7 +406,7 @@ Certifications: Google Cloud Associate Cloud Engineer (Dec 2025); Google Profess
         transcriptBox.classList.remove("empty-strip");
         if(autoAnswerTimer) { clearTimeout(autoAnswerTimer); autoAnswerTimer = null; }
         if(e.error==="not-allowed"||e.error==="service-not-allowed"){
-          transcriptText.textContent="Microphone permission denied. Allow mic access in the browser and tap Listen again.";
+          transcriptText.textContent="Microphone permission denied. Tap the site controls icon in Chrome, open Permissions, allow Microphone, then tap Listen again.";
         } else {
           transcriptText.textContent="Speech recognition stopped due to error: "+e.error+". Tap Listen to restart.";
         }
@@ -516,7 +521,24 @@ Certifications: Google Cloud Associate Cloud Engineer (Dec 2025); Google Profess
     if(status===404) return "Model \""+cfg.model+"\" not available on your tier. Open ⚙ and pick another.";
     if(status===429) return "Free-tier rate limit hit. Wait a moment and try again.";
     if(status===400 && /API key/i.test(msg||"")) return "Invalid API key. Check it in ⚙ Setup.";
+    if(status===400 && /invalid argument/i.test(msg||"")) return "Google rejected the request. I retried with a simpler payload; if this still appears, open ⚙ and switch to gemini-3.1-flash-lite.";
     return msg || ("Request failed ("+status+").");
+  }
+
+  async function errorMessageFromResponse(res){
+    try{
+      const j=await res.json();
+      const err=j && j.error;
+      const details=err && err.details;
+      let msg=(err && err.message) || "";
+      if(details && details.length){
+        const detailText=details.map(d=>d.reason||d.message||d.description||"").filter(Boolean).join(" ");
+        if(detailText) msg = msg ? msg+" "+detailText : detailText;
+      }
+      return msg;
+    }catch(_){
+      return "";
+    }
   }
 
   answerBtn.onclick=async function(){
@@ -551,15 +573,14 @@ Certifications: Google Cloud Associate Cloud Engineer (Dec 2025); Google Profess
     const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(cfg.model)+
               ":streamGenerateContent?alt=sse&key="+encodeURIComponent(cfg.key);
 
-    function call(applyThinkingBudgetLimit){
-      const gen={temperature:0.2,maxOutputTokens:1024,topP:0.9};
-      // Disable model "thinking": its hidden reasoning otherwise eats the output
-      // budget and truncates the visible answer mid-sentence. Also lowers latency.
-      if(applyThinkingBudgetLimit) gen.thinkingConfig={thinkingBudget:0};
-      const body={
+    function call(simplePayload){
+      const prompt=buildSystem()+"\n\nLive transcript:\n\""+t+"\"\n\nAnswer the most recent question.";
+      const body=simplePayload ? {
+        contents:[{role:"user",parts:[{text:prompt}]}]
+      } : {
         systemInstruction:{parts:[{text:buildSystem()}]},
         contents:[{role:"user",parts:[{text:"Live transcript:\n\""+t+"\"\n\nAnswer the most recent question."}]}],
-        generationConfig:gen
+        generationConfig:{temperature:0.2,maxOutputTokens:1024,topP:0.9}
       };
       return fetch(url,{
         method:"POST",
@@ -571,25 +592,19 @@ Certifications: Google Cloud Associate Cloud Engineer (Dec 2025); Google Profess
 
     let acc="", finish=null;
     try{
-      let res;
-      // If we already know the model doesn't support thinkingConfig, bypass it to avoid latency
-      if(modelSupportsThinkingConfig){
+      let res=await call(false);
+      if(!res.ok && res.status===400){
+        const firstMsg=await errorMessageFromResponse(res);
         res=await call(true);
-        // Some models (e.g. 2.0 or older) reject thinkingConfig -> retry once without it.
-        if(!res.ok && res.status===400){
-          let emsg=""; try{ const j=await res.json(); emsg=(j.error&&j.error.message)||""; }catch(_){}
-          if(/thinking/i.test(emsg)){ 
-            modelSupportsThinkingConfig = false; // cache validation state
-            res=await call(false); 
-          }
-          else { renderError(statusMessage(400,emsg)); return; }
+        if(!res.ok){
+          const secondMsg=await errorMessageFromResponse(res);
+          renderError(statusMessage(res.status,secondMsg||firstMsg));
+          return;
         }
-      } else {
-        res=await call(false);
       }
 
       if(!res.ok){
-        let emsg=""; try{ const j=await res.json(); emsg=(j.error&&j.error.message)||""; }catch(_){}
+        let emsg=await errorMessageFromResponse(res);
         renderError(statusMessage(res.status,emsg)); return;
       }
 
